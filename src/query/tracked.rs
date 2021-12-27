@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 
 use super::type_info::TypeInfo;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AccessMode {
     ReadOnly,
     ReadWrite,
@@ -172,10 +173,52 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::{Changes, Trackable, TypeInfo};
+    use super::{AccessMode, Changes, Trackable, TypeInfo};
 
     #[test]
-    fn tracked_reference() {
+    fn tracked_ref_metadata() {
+        type QueryType<'a> = &'a u32;
+
+        assert_eq!(QueryType::count_types(), 1);
+
+        let mut all_types = vec![];
+        QueryType::for_each_type(|t, m| all_types.push((t, m)));
+        assert_eq!(
+            all_types.as_slice(),
+            &[(TypeInfo::of::<u32>(), AccessMode::ReadOnly)]
+        );
+    }
+
+    #[test]
+    fn tracked_mut_metadata() {
+        type QueryType<'a> = &'a mut u32;
+
+        assert_eq!(QueryType::count_types(), 1);
+
+        let mut all_types = vec![];
+        QueryType::for_each_type(|t, m| all_types.push((t, m)));
+        assert_eq!(
+            all_types.as_slice(),
+            &[(TypeInfo::of::<u32>(), AccessMode::ReadWrite)]
+        );
+    }
+
+    #[test]
+    fn tracked_option_metadata() {
+        type QueryType<'a> = Option<&'a u32>;
+
+        assert_eq!(QueryType::count_types(), 1);
+
+        let mut all_types = vec![];
+        QueryType::for_each_type(|t, m| all_types.push((t, m)));
+        assert_eq!(
+            all_types.as_slice(),
+            &[(TypeInfo::of::<u32>(), AccessMode::ReadOnly)]
+        );
+    }
+
+    #[test]
+    fn tracked_ref() {
         let mut value = 0u32;
         let reference = &mut value;
         let changes = Changes::new_for(&reference);
@@ -209,9 +252,7 @@ mod tests {
         assert_eq!(tracked.as_deref().cloned(), Some(0));
         assert_eq!(changed_types.len(), 0);
 
-        tracked
-            .as_mut()
-            .map(|v| {**v = 1});
+        tracked.as_mut().map(|v| **v = 1);
         changes.for_each_changed(|t| changed_types.push(t));
         assert_eq!(changed_types.len(), 1);
         assert_eq!(tracked.as_deref().cloned(), Some(1));
