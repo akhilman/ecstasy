@@ -40,7 +40,7 @@ where
     }
 
     fn to_tracked(self, changes: &'a Changes) -> Self::Tracked {
-        Tracked::new(self, changes.get_atomic::<&T>().expect("Type not tracked"))
+        Tracked::new(self, changes)
     }
 }
 
@@ -48,7 +48,6 @@ impl<'a, T> Trackable<'a> for &'a mut T
 where
     T: 'static,
 {
-
     type Tracked = Tracked<'a, Self>;
 
     fn count_types() -> usize {
@@ -60,7 +59,7 @@ where
     }
 
     fn to_tracked(self, changes: &'a Changes) -> Self::Tracked {
-        Tracked::new(self, changes.get_atomic::<&T>().expect("Type not tracked"))
+        Tracked::new(self, changes)
     }
 }
 
@@ -83,7 +82,6 @@ where
     }
 }
 
-
 pub struct Changes {
     changes: BTreeMap<TypeInfo, AtomicBool>,
 }
@@ -101,15 +99,6 @@ impl Changes {
         Self { changes }
     }
 
-    fn get_atomic<'a,T: Trackable<'a>>(&self) -> Option<&AtomicBool> {
-        let mut maybe_type_info = None;
-        T::for_each_type(|t, _| {
-            debug_assert_eq!(maybe_type_info, None);
-            maybe_type_info.replace(t);
-        });
-        maybe_type_info.map(|t| self.changes.get(&t)).flatten()
-    }
-
     pub fn for_each_changed(&self, mut f: impl FnMut(TypeInfo)) {
         self.changes.iter().for_each(|(t, c)| {
             if c.load(Ordering::Relaxed) {
@@ -118,9 +107,9 @@ impl Changes {
         })
     }
 
-    pub fn set_changed<'a,T: Trackable<'a>>(&mut self) {
+    pub fn set_changed<'a, T: Trackable<'a>>(&self) {
         <T as Trackable>::for_each_type(|id, _| {
-            if let Some(value) = self.changes.get_mut(&id) {
+            if let Some(value) = self.changes.get(&id) {
                 value.store(true, Ordering::Relaxed);
             } else {
                 // FIXME What we should do if item not found?
@@ -128,42 +117,42 @@ impl Changes {
         });
     }
 
-    // TODO drop
-    // pub fn is_changed<T: Trackable>(&self) -> bool {
-    //     let mut ret = false;
-    //     <T as Trackable>::for_each_type(|id, _| {
-    //         ret = match self.changes.get(&id) {
-    //             Some(value) => value.load(Ordering::Relaxed),
-    //             None => false, // FIXME What we should do if item not found?
-    //         };
-    //     });
-    //     ret
-    // }
+    pub fn is_changed<'a, T: Trackable<'a>>(&self) -> bool {
+        let mut ret = false;
+        <T as Trackable>::for_each_type(|id, _| {
+            ret = ret
+                || match self.changes.get(&id) {
+                    Some(value) => value.load(Ordering::Relaxed),
+                    None => false, // FIXME What we should do if item not found?
+                };
+        });
+        ret
+    }
 }
 
 pub struct Tracked<'a, T>
 where
-    T: 'a,
+    T: 'a + Trackable<'a>,
 {
     value: T,
-    changed: &'a AtomicBool,
+    changes: &'a Changes,
 }
 
 impl<'a, T> Tracked<'a, T>
 where
-    T: 'a,
+    T: 'a + Trackable<'a>,
 {
-    fn new(value: T, changed: &'a AtomicBool) -> Self {
-        Self { value, changed }
+    fn new(value: T, changes: &'a Changes) -> Self {
+        Self { value, changes }
     }
     pub fn set_changed(&self) {
-        self.changed.store(true, Ordering::Relaxed);
+        self.changes.set_changed::<T>();
     }
 }
 
 impl<'a, T> Deref for Tracked<'a, T>
 where
-    T: 'a + Deref,
+    T: 'a + Deref + Trackable<'a>,
 {
     type Target = <T as Deref>::Target;
     fn deref(&self) -> &Self::Target {
@@ -173,7 +162,7 @@ where
 
 impl<'a, T> DerefMut for Tracked<'a, T>
 where
-    T: 'a + DerefMut,
+    T: 'a + DerefMut + Trackable<'a>,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.set_changed();
@@ -183,7 +172,8 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{Changes, Trackable, TypeInfo};
+
     #[test]
     fn tracked_reference() {
         let mut value = 0u32;
@@ -201,6 +191,30 @@ mod tests {
         changes.for_each_changed(|t| changed_types.push(t));
         assert_eq!(changed_types.len(), 1);
         assert_eq!(*tracked, 1);
+        assert_eq!(changed_types.first(), Some(TypeInfo::of::<u32>()).as_ref());
+
+        assert_eq!(value, 1);
+    }
+
+    #[test]
+    fn tracked_option() {
+        let mut value = 0u32;
+        let reference = Some(&mut value);
+        let changes = Changes::new_for(&reference);
+        let mut tracked = reference.to_tracked(&changes);
+        let mut changed_types = vec![];
+
+        changes.for_each_changed(|t| changed_types.push(t));
+        assert_eq!(changed_types.len(), 0);
+        assert_eq!(tracked.as_deref().cloned(), Some(0));
+        assert_eq!(changed_types.len(), 0);
+
+        tracked
+            .as_mut()
+            .map(|v| {**v = 1});
+        changes.for_each_changed(|t| changed_types.push(t));
+        assert_eq!(changed_types.len(), 1);
+        assert_eq!(tracked.as_deref().cloned(), Some(1));
         assert_eq!(changed_types.first(), Some(TypeInfo::of::<u32>()).as_ref());
 
         assert_eq!(value, 1);
