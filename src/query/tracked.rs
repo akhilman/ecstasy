@@ -11,17 +11,26 @@ pub enum AccessMode {
     ReadWrite,
 }
 
-pub trait Trackable {
+pub trait Trackable<'a>
+where
+    Self: 'a,
+{
+    type Tracked: 'a;
+
     fn count_types() -> usize;
 
     /// Invoke `f` for every type that may be borrowed and whether the borrow is unique
     fn for_each_type(f: impl FnMut(TypeInfo, AccessMode));
+
+    fn to_tracked(self, changes: &'a Changes) -> Self::Tracked;
 }
 
-impl<'a, T> Trackable for &'a T
+impl<'a, T> Trackable<'a> for &'a T
 where
     T: 'static,
 {
+    type Tracked = Tracked<'a, Self>;
+
     fn count_types() -> usize {
         1
     }
@@ -29,12 +38,19 @@ where
     fn for_each_type(mut f: impl FnMut(TypeInfo, AccessMode)) {
         f(TypeInfo::of::<T>(), AccessMode::ReadOnly);
     }
+
+    fn to_tracked(self, changes: &'a Changes) -> Self::Tracked {
+        Tracked::new(self, changes.get_atomic::<&T>().expect("Type not tracked"))
+    }
 }
 
-impl<'a, T> Trackable for &'a mut T
+impl<'a, T> Trackable<'a> for &'a mut T
 where
     T: 'static,
 {
+
+    type Tracked = Tracked<'a, Self>;
+
     fn count_types() -> usize {
         1
     }
@@ -42,12 +58,18 @@ where
     fn for_each_type(mut f: impl FnMut(TypeInfo, AccessMode)) {
         f(TypeInfo::of::<T>(), AccessMode::ReadWrite);
     }
+
+    fn to_tracked(self, changes: &'a Changes) -> Self::Tracked {
+        Tracked::new(self, changes.get_atomic::<&T>().expect("Type not tracked"))
+    }
 }
 
-impl<T> Trackable for Option<T>
+impl<'a, T> Trackable<'a> for Option<T>
 where
-    T: Trackable,
+    T: Trackable<'a>,
 {
+    type Tracked = Option<<T as Trackable<'a>>::Tracked>;
+
     fn count_types() -> usize {
         <T as Trackable>::count_types()
     }
@@ -55,54 +77,19 @@ where
     fn for_each_type(f: impl FnMut(TypeInfo, AccessMode)) {
         <T as Trackable>::for_each_type(f)
     }
-}
 
-pub trait ToTracked<'c> {
-    type Tracked: 'c;
-    fn to_tracked(self, changes: &'c Changes) -> Self::Tracked;
-}
-
-impl<'a, T> ToTracked<'a> for &'a T
-where
-    T: 'static,
-    Self: 'a + Trackable,
-{
-    type Tracked = Tracked<'a, Self>;
-    fn to_tracked(self, changes: &'a Changes) -> Self::Tracked {
-        Tracked::new(self, changes.get_atomic::<&T>().expect("Type not tracked"))
-    }
-}
-
-impl<'a, T> ToTracked<'a> for &'a mut T
-where
-    T: 'static,
-    Self: 'a + Trackable,
-{
-    type Tracked = Tracked<'a, Self>;
-    fn to_tracked(self, changes: &'a Changes) -> Self::Tracked {
-        Tracked::new(
-            self,
-            changes.get_atomic::<&mut T>().expect("Type not tracked"),
-        )
-    }
-}
-
-impl<'a, T> ToTracked<'a> for Option<T>
-where
-    T: 'a + Trackable + ToTracked<'a>,
-{
-    type Tracked = Option<<T as ToTracked<'a>>::Tracked>;
     fn to_tracked(self, changes: &'a Changes) -> Self::Tracked {
         self.map(|value| value.to_tracked(changes))
     }
 }
+
 
 pub struct Changes {
     changes: BTreeMap<TypeInfo, AtomicBool>,
 }
 
 impl Changes {
-    pub(crate) fn new_for<T: Trackable>(_: &T) -> Self {
+    pub(crate) fn new_for<'a, T: Trackable<'a>>(_: &T) -> Self {
         use std::collections::btree_map::Entry;
         let mut changes = BTreeMap::default();
         <T as Trackable>::for_each_type(|id, _| match changes.entry(id) {
@@ -114,7 +101,7 @@ impl Changes {
         Self { changes }
     }
 
-    fn get_atomic<T: Trackable>(&self) -> Option<&AtomicBool> {
+    fn get_atomic<'a,T: Trackable<'a>>(&self) -> Option<&AtomicBool> {
         let mut maybe_type_info = None;
         T::for_each_type(|t, _| {
             debug_assert_eq!(maybe_type_info, None);
@@ -131,7 +118,7 @@ impl Changes {
         })
     }
 
-    pub fn set_changed<T: Trackable>(&mut self) {
+    pub fn set_changed<'a,T: Trackable<'a>>(&mut self) {
         <T as Trackable>::for_each_type(|id, _| {
             if let Some(value) = self.changes.get_mut(&id) {
                 value.store(true, Ordering::Relaxed);
