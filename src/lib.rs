@@ -13,7 +13,8 @@ macro_rules! smaller_tuples_too {
     };
 }
 
-mod query;
+pub mod query;
+
 
 // pub mod query;
 
