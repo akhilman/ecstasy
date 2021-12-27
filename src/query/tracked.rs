@@ -12,8 +12,6 @@ pub enum AccessMode {
 }
 
 pub trait Trackable {
-    type Deref: 'static + Sized;
-
     fn count_types() -> usize;
 
     /// Invoke `f` for every type that may be borrowed and whether the borrow is unique
@@ -24,8 +22,6 @@ impl<'a, T> Trackable for &'a T
 where
     T: 'static,
 {
-    type Deref = T;
-
     fn count_types() -> usize {
         1
     }
@@ -39,8 +35,6 @@ impl<'a, T> Trackable for &'a mut T
 where
     T: 'static,
 {
-    type Deref = T;
-
     fn count_types() -> usize {
         1
     }
@@ -54,8 +48,6 @@ impl<T> Trackable for Option<T>
 where
     T: Trackable,
 {
-    type Deref = Option<<T as Trackable>::Deref>;
-
     fn count_types() -> usize {
         <T as Trackable>::count_types()
     }
@@ -65,8 +57,7 @@ where
     }
 }
 
-pub trait ToTracked<'c>
-{
+pub trait ToTracked<'c> {
     type Tracked: 'c;
     fn to_tracked(self, changes: &'c Changes) -> Self::Tracked;
 }
@@ -74,7 +65,7 @@ pub trait ToTracked<'c>
 impl<'a, T> ToTracked<'a> for &'a T
 where
     T: 'static,
-    &'a T: 'a + Trackable,
+    Self: 'a + Trackable,
 {
     type Tracked = Tracked<'a, Self>;
     fn to_tracked(self, changes: &'a Changes) -> Self::Tracked {
@@ -85,7 +76,7 @@ where
 impl<'a, T> ToTracked<'a> for &'a mut T
 where
     T: 'static,
-    &'a mut T: 'a + Trackable,
+    Self: 'a + Trackable,
 {
     type Tracked = Tracked<'a, Self>;
     fn to_tracked(self, changes: &'a Changes) -> Self::Tracked {
@@ -106,16 +97,12 @@ where
     }
 }
 
-pub struct Changes
-{
+pub struct Changes {
     changes: BTreeMap<TypeInfo, AtomicBool>,
 }
 
-impl Changes
-where
-{
-
-    pub fn new_for<T: Trackable>(_:&T) -> Self {
+impl Changes {
+    pub(crate) fn new_for<T: Trackable>(_: &T) -> Self {
         use std::collections::btree_map::Entry;
         let mut changes = BTreeMap::default();
         <T as Trackable>::for_each_type(|id, _| match changes.entry(id) {
@@ -124,13 +111,16 @@ where
             }
             Entry::Occupied(_) => (),
         });
-        Self {
-            changes,
-        }
+        Self { changes }
     }
 
     fn get_atomic<T: Trackable>(&self) -> Option<&AtomicBool> {
-        self.changes.get(&TypeInfo::of::<<T as Trackable>::Deref>())
+        let mut maybe_type_info = None;
+        T::for_each_type(|t, _| {
+            debug_assert_eq!(maybe_type_info, None);
+            maybe_type_info.replace(t);
+        });
+        maybe_type_info.map(|t| self.changes.get(&t)).flatten()
     }
 
     pub fn for_each_changed(&self, mut f: impl FnMut(TypeInfo)) {
@@ -142,11 +132,11 @@ where
     }
 
     pub fn set_changed<T: Trackable>(&mut self) {
-        use std::collections::btree_map::Entry;
-        <T as Trackable>::for_each_type(|id, _| match self.changes.entry(id) {
-            Entry::Vacant(_) => (), // FIXME What we should do if item not found?
-            Entry::Occupied(entry) => {
-                entry.into_mut().store(true, Ordering::Relaxed);
+        <T as Trackable>::for_each_type(|id, _| {
+            if let Some(value) = self.changes.get_mut(&id) {
+                value.store(true, Ordering::Relaxed);
+            } else {
+                // FIXME What we should do if item not found?
             }
         });
     }
@@ -164,10 +154,9 @@ where
     // }
 }
 
-
 pub struct Tracked<'a, T>
 where
-    T: 'a + Trackable,
+    T: 'a,
 {
     value: T,
     changed: &'a AtomicBool,
@@ -175,9 +164,9 @@ where
 
 impl<'a, T> Tracked<'a, T>
 where
-    T: 'a + Trackable,
+    T: 'a,
 {
-    pub fn new(value: T, changed: &'a AtomicBool) -> Self {
+    fn new(value: T, changed: &'a AtomicBool) -> Self {
         Self { value, changed }
     }
     pub fn set_changed(&self) {
@@ -187,7 +176,7 @@ where
 
 impl<'a, T> Deref for Tracked<'a, T>
 where
-    T: 'a + Trackable + Deref,
+    T: 'a + Deref,
 {
     type Target = <T as Deref>::Target;
     fn deref(&self) -> &Self::Target {
@@ -197,7 +186,7 @@ where
 
 impl<'a, T> DerefMut for Tracked<'a, T>
 where
-    T: 'a + Trackable + DerefMut,
+    T: 'a + DerefMut,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.set_changed();
