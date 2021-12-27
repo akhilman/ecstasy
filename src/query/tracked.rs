@@ -1,5 +1,4 @@
 use core::{
-    marker::PhantomData,
     ops::{Deref, DerefMut},
     sync::atomic::{AtomicBool, Ordering},
 };
@@ -66,34 +65,30 @@ where
     }
 }
 
-pub trait ToTracked<'c, C>
-where
-    C: Trackable,
+pub trait ToTracked<'c>
 {
     type Tracked: 'c;
-    fn to_tracked(self, changes: &'c Changes<C>) -> Self::Tracked;
+    fn to_tracked(self, changes: &'c Changes) -> Self::Tracked;
 }
 
-impl<'a, C, T> ToTracked<'a, C> for &'a T
+impl<'a, T> ToTracked<'a> for &'a T
 where
-    C: Trackable,
     T: 'static,
     &'a T: 'a + Trackable,
 {
     type Tracked = Tracked<'a, Self>;
-    fn to_tracked(self, changes: &'a Changes<C>) -> Self::Tracked {
+    fn to_tracked(self, changes: &'a Changes) -> Self::Tracked {
         Tracked::new(self, changes.get_atomic::<&T>().expect("Type not tracked"))
     }
 }
 
-impl<'a, C, T> ToTracked<'a, C> for &'a mut T
+impl<'a, T> ToTracked<'a> for &'a mut T
 where
-    C: Trackable,
     T: 'static,
     &'a mut T: 'a + Trackable,
 {
     type Tracked = Tracked<'a, Self>;
-    fn to_tracked(self, changes: &'a Changes<C>) -> Self::Tracked {
+    fn to_tracked(self, changes: &'a Changes) -> Self::Tracked {
         Tracked::new(
             self,
             changes.get_atomic::<&mut T>().expect("Type not tracked"),
@@ -101,29 +96,39 @@ where
     }
 }
 
-impl<'a, C, T> ToTracked<'a, C> for Option<T>
+impl<'a, T> ToTracked<'a> for Option<T>
 where
-    C: Trackable,
-    T: 'a + Trackable + ToTracked<'a, C>,
+    T: 'a + Trackable + ToTracked<'a>,
 {
-    type Tracked = Option<<T as ToTracked<'a, C>>::Tracked>;
-    fn to_tracked(self, changes: &'a Changes<C>) -> Self::Tracked {
+    type Tracked = Option<<T as ToTracked<'a>>::Tracked>;
+    fn to_tracked(self, changes: &'a Changes) -> Self::Tracked {
         self.map(|value| value.to_tracked(changes))
     }
 }
 
-pub struct Changes<CT>
-where
-    CT: Trackable,
+pub struct Changes
 {
     changes: BTreeMap<TypeInfo, AtomicBool>,
-    _phantom: PhantomData<CT>,
 }
 
-impl<CT> Changes<CT>
+impl Changes
 where
-    CT: Trackable,
 {
+
+    pub fn new_for<T: Trackable>(_:&T) -> Self {
+        use std::collections::btree_map::Entry;
+        let mut changes = BTreeMap::default();
+        <T as Trackable>::for_each_type(|id, _| match changes.entry(id) {
+            Entry::Vacant(entry) => {
+                entry.insert(AtomicBool::new(false));
+            }
+            Entry::Occupied(_) => (),
+        });
+        Self {
+            changes,
+        }
+    }
+
     fn get_atomic<T: Trackable>(&self) -> Option<&AtomicBool> {
         self.changes.get(&TypeInfo::of::<<T as Trackable>::Deref>())
     }
@@ -159,25 +164,6 @@ where
     // }
 }
 
-impl<CT> Default for Changes<CT>
-where
-    CT: Trackable,
-{
-    fn default() -> Self {
-        use std::collections::btree_map::Entry;
-        let mut changes = BTreeMap::default();
-        <CT as Trackable>::for_each_type(|id, _| match changes.entry(id) {
-            Entry::Vacant(entry) => {
-                entry.insert(AtomicBool::new(false));
-            }
-            Entry::Occupied(_) => (),
-        });
-        Self {
-            changes,
-            _phantom: PhantomData,
-        }
-    }
-}
 
 pub struct Tracked<'a, T>
 where
@@ -226,7 +212,7 @@ mod tests {
     fn tracked_reference() {
         let mut value = 0u32;
         let reference = &mut value;
-        let changes = Changes::<&mut u32>::default();
+        let changes = Changes::new_for(&reference);
         let mut tracked = reference.to_tracked(&changes);
         let mut changed_types = vec![];
 
