@@ -1,8 +1,8 @@
 mod hecs;
 mod tracked;
-mod type_info;
+mod type_id;
 
 pub use {
     tracked::{AccessMode, Changes, Trackable, Tracked},
-    type_info::TypeInfo,
+    type_id::ElementTypeId,
 };

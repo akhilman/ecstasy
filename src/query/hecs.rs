@@ -1,7 +1,4 @@
-use super::{
-    tracked::{AccessMode, Changes, Trackable},
-    type_info::TypeInfo,
-};
+use super::{AccessMode, Changes, Trackable, ElementTypeId};
 
 use hecs::Or;
 
@@ -16,7 +13,7 @@ where
         L::count_types() + R::count_types()
     }
 
-    fn for_each_type(mut f: impl FnMut(TypeInfo, AccessMode)) {
+    fn for_each_type(mut f: impl FnMut(ElementTypeId, AccessMode)) {
         L::for_each_type(|t, m| f(t, m));
         R::for_each_type(|t, m| f(t, m));
     }
@@ -32,7 +29,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::query::{AccessMode, Changes, Trackable, TypeInfo};
+    use crate::query::{AccessMode, Changes, Trackable, ElementTypeId};
     use hecs::Or;
 
     #[test]
@@ -44,8 +41,8 @@ mod tests {
         let mut all_types = vec![];
         QueryType::for_each_type(|t, m| all_types.push((t, m)));
         assert_eq!(all_types.len(), 2);
-        assert!(all_types.contains(&(TypeInfo::of::<u32>(), AccessMode::ReadWrite)));
-        assert!(all_types.contains(&(TypeInfo::of::<f32>(), AccessMode::ReadOnly)));
+        assert!(all_types.contains(&(ElementTypeId::of::<u32>(), AccessMode::ReadWrite)));
+        assert!(all_types.contains(&(ElementTypeId::of::<f32>(), AccessMode::ReadOnly)));
     }
 
     #[test]
@@ -73,7 +70,7 @@ mod tests {
             .as_ref()
             .map(|l| assert_eq!(**l, 1), |r| assert_eq!(**r, 0.0));
         changes.for_each_changed(|t| changed_types.push(t));
-        assert_eq!(changed_types.as_slice(), &[TypeInfo::of::<u32>()]);
+        assert_eq!(changed_types.as_slice(), &[ElementTypeId::of::<u32>()]);
     }
 
     #[test]
@@ -101,7 +98,7 @@ mod tests {
             .as_ref()
             .map(|l| assert_eq!(**l, 0), |r| assert_eq!(**r, 1.0));
         changes.for_each_changed(|t| changed_types.push(t));
-        assert_eq!(changed_types.as_slice(), &[TypeInfo::of::<f32>()]);
+        assert_eq!(changed_types.as_slice(), &[ElementTypeId::of::<f32>()]);
     }
 
     #[test]
@@ -128,7 +125,7 @@ mod tests {
             .as_ref()
             .map(|l| assert_eq!(**l, 1), |r| assert_eq!(**r, 0.0));
         changes.for_each_changed(|t| changed_types.push(t));
-        assert_eq!(changed_types.as_slice(), &[TypeInfo::of::<u32>()]);
+        assert_eq!(changed_types.as_slice(), &[ElementTypeId::of::<u32>()]);
 
         changed_types.clear();
         tracked.as_mut().right().map(|r| **r = 2.0);
@@ -136,7 +133,7 @@ mod tests {
             .as_ref()
             .map(|l| assert_eq!(**l, 1), |r| assert_eq!(**r, 2.0));
         changes.for_each_changed(|t| changed_types.push(t));
-        let expected_changed_types = &mut [TypeInfo::of::<u32>(), TypeInfo::of::<f32>()];
+        let expected_changed_types = &mut [ElementTypeId::of::<u32>(), ElementTypeId::of::<f32>()];
         changed_types.sort();
         expected_changed_types.sort();
         assert_eq!(changed_types.as_slice(), expected_changed_types,);

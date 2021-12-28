@@ -1,24 +1,24 @@
-use core::any::{type_name, TypeId};
+use core::any;
 
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Eq, Ord)]
-pub struct TypeInfo {
-    id: TypeId,
+pub struct ElementTypeId {
+    id: any::TypeId,
     #[cfg(debug_assertions)]
     name: &'static str,
 }
 
-impl TypeInfo {
+impl ElementTypeId {
     pub fn of<T>() -> Self
     where
         T: 'static,
     {
         Self {
-            id: TypeId::of::<T>(),
-            name: type_name::<T>(),
+            id: any::TypeId::of::<T>(),
+            name: any::type_name::<T>(),
         }
     }
 
-    pub fn id(&self) -> TypeId {
+    pub fn id(&self) -> any::TypeId {
         self.id
     }
 
@@ -28,18 +28,18 @@ impl TypeInfo {
     }
 }
 
-impl core::fmt::Display for TypeInfo {
+impl core::fmt::Display for ElementTypeId {
     #[cfg(debug_assertions)]
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.write_str(self.name)
     }
     #[cfg(not(debug_assertions))]
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!("type_id:{}", self.id)
+        write!("type_id:{:#x}", self.id)
     }
 }
 
-impl core::hash::Hash for TypeInfo {
+impl core::hash::Hash for ElementTypeId {
     fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
         self.id.hash(state);
     }

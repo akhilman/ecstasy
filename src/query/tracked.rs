@@ -4,7 +4,7 @@ use core::{
 };
 use std::collections::BTreeMap;
 
-use super::type_info::TypeInfo;
+use super::ElementTypeId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AccessMode {
@@ -21,7 +21,7 @@ where
     fn count_types() -> usize;
 
     /// Invoke `f` for every type that may be borrowed and whether the borrow is unique
-    fn for_each_type(f: impl FnMut(TypeInfo, AccessMode));
+    fn for_each_type(f: impl FnMut(ElementTypeId, AccessMode));
 
     fn to_tracked(self, changes: &'a Changes) -> Self::Tracked;
 }
@@ -36,8 +36,8 @@ where
         1
     }
 
-    fn for_each_type(mut f: impl FnMut(TypeInfo, AccessMode)) {
-        f(TypeInfo::of::<T>(), AccessMode::ReadOnly);
+    fn for_each_type(mut f: impl FnMut(ElementTypeId, AccessMode)) {
+        f(ElementTypeId::of::<T>(), AccessMode::ReadOnly);
     }
 
     fn to_tracked(self, changes: &'a Changes) -> Self::Tracked {
@@ -55,8 +55,8 @@ where
         1
     }
 
-    fn for_each_type(mut f: impl FnMut(TypeInfo, AccessMode)) {
-        f(TypeInfo::of::<T>(), AccessMode::ReadWrite);
+    fn for_each_type(mut f: impl FnMut(ElementTypeId, AccessMode)) {
+        f(ElementTypeId::of::<T>(), AccessMode::ReadWrite);
     }
 
     fn to_tracked(self, changes: &'a Changes) -> Self::Tracked {
@@ -74,7 +74,7 @@ where
         <T as Trackable>::count_types()
     }
 
-    fn for_each_type(f: impl FnMut(TypeInfo, AccessMode)) {
+    fn for_each_type(f: impl FnMut(ElementTypeId, AccessMode)) {
         <T as Trackable>::for_each_type(f)
     }
 
@@ -84,7 +84,7 @@ where
 }
 
 pub struct Changes {
-    changes: BTreeMap<TypeInfo, AtomicBool>,
+    changes: BTreeMap<ElementTypeId, AtomicBool>,
 }
 
 impl Changes {
@@ -100,7 +100,7 @@ impl Changes {
         Self { changes }
     }
 
-    pub fn for_each_changed(&self, mut f: impl FnMut(TypeInfo)) {
+    pub fn for_each_changed(&self, mut f: impl FnMut(ElementTypeId)) {
         self.changes.iter().for_each(|(t, c)| {
             if c.load(Ordering::Relaxed) {
                 f(*t)
@@ -173,7 +173,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::{AccessMode, Changes, Trackable, TypeInfo};
+    use super::{AccessMode, Changes, ElementTypeId, Trackable};
 
     #[test]
     fn tracked_ref_metadata() {
@@ -185,7 +185,7 @@ mod tests {
         QueryType::for_each_type(|t, m| all_types.push((t, m)));
         assert_eq!(
             all_types.as_slice(),
-            &[(TypeInfo::of::<u32>(), AccessMode::ReadOnly)]
+            &[(ElementTypeId::of::<u32>(), AccessMode::ReadOnly)]
         );
     }
 
@@ -199,7 +199,7 @@ mod tests {
         QueryType::for_each_type(|t, m| all_types.push((t, m)));
         assert_eq!(
             all_types.as_slice(),
-            &[(TypeInfo::of::<u32>(), AccessMode::ReadWrite)]
+            &[(ElementTypeId::of::<u32>(), AccessMode::ReadWrite)]
         );
     }
 
@@ -213,7 +213,7 @@ mod tests {
         QueryType::for_each_type(|t, m| all_types.push((t, m)));
         assert_eq!(
             all_types.as_slice(),
-            &[(TypeInfo::of::<u32>(), AccessMode::ReadOnly)]
+            &[(ElementTypeId::of::<u32>(), AccessMode::ReadOnly)]
         );
     }
 
@@ -234,7 +234,10 @@ mod tests {
         changes.for_each_changed(|t| changed_types.push(t));
         assert_eq!(changed_types.len(), 1);
         assert_eq!(*tracked, 1);
-        assert_eq!(changed_types.first(), Some(TypeInfo::of::<u32>()).as_ref());
+        assert_eq!(
+            changed_types.first(),
+            Some(ElementTypeId::of::<u32>()).as_ref()
+        );
 
         assert_eq!(value, 1);
     }
@@ -256,7 +259,10 @@ mod tests {
         changes.for_each_changed(|t| changed_types.push(t));
         assert_eq!(changed_types.len(), 1);
         assert_eq!(tracked.as_deref().cloned(), Some(1));
-        assert_eq!(changed_types.first(), Some(TypeInfo::of::<u32>()).as_ref());
+        assert_eq!(
+            changed_types.first(),
+            Some(ElementTypeId::of::<u32>()).as_ref()
+        );
 
         assert_eq!(value, 1);
     }
