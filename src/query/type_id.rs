@@ -14,6 +14,7 @@ impl ElementTypeId {
     {
         Self {
             id: any::TypeId::of::<T>(),
+            #[cfg(debug_assertions)]
             name: any::type_name::<T>(),
         }
     }
@@ -35,7 +36,7 @@ impl core::fmt::Display for ElementTypeId {
     }
     #[cfg(not(debug_assertions))]
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!("type_id:{:#x}", self.id)
+        write!(f, "type_id:{:#x?}", self.id)
     }
 }
 
