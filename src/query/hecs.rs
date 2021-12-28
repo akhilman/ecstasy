@@ -58,6 +58,7 @@ mod tests {
         tracked
             .as_ref()
             .map(|l| assert_eq!(**l, 0), |_| unreachable!());
+
         let mut changed_types = vec![];
         changes.for_each_changed(|t| changed_types.push(t));
         assert!(changed_types.is_empty());
@@ -119,23 +120,23 @@ mod tests {
         changes.for_each_changed(|t| changed_types.push(t));
         assert!(changed_types.is_empty());
 
-        changed_types.clear();
         tracked.as_mut().left().map(|l| **l = 1);
         tracked
             .as_ref()
             .map(|l| assert_eq!(**l, 1), |r| assert_eq!(**r, 0.0));
+        let mut changed_types = vec![];
         changes.for_each_changed(|t| changed_types.push(t));
         assert_eq!(changed_types.as_slice(), &[ElementTypeId::of::<u32>()]);
 
-        changed_types.clear();
         tracked.as_mut().right().map(|r| **r = 2.0);
         tracked
             .as_ref()
             .map(|l| assert_eq!(**l, 1), |r| assert_eq!(**r, 2.0));
+        let mut changed_types = vec![];
         changes.for_each_changed(|t| changed_types.push(t));
         let expected_changed_types = &mut [ElementTypeId::of::<u32>(), ElementTypeId::of::<f32>()];
         changed_types.sort();
         expected_changed_types.sort();
-        assert_eq!(changed_types.as_slice(), expected_changed_types,);
+        assert_eq!(changed_types.as_slice(), expected_changed_types);
     }
 }
