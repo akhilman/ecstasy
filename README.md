@@ -1,4 +1,4 @@
-# ecars
+# ECStASy
 Asynchronous reactive scheduler for [Handy Entity Component System](https://github.com/Ralith/hecs)
 
 
