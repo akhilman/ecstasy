@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 
 use super::ElementTypeId;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum AccessMode {
     ReadOnly,
     ReadWrite,
