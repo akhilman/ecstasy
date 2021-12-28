@@ -3,7 +3,7 @@ Asynchronous reactive scheduler for [Handy Entity Component System](https://gith
 
 
 ## TODO
-- [ ] Change tracking for all hecs query types;
+- [X] Change tracking for `&T`, `&mut T`, `hecs::Or`, and tuples;
 - [ ] Tracked adapter for `hecs::Query` and `hecs::QueryIter`;
 - [ ] Tracked adapter for rest hecs'es query types;
 - [ ] Tracked adapter for rest hecs'es query iterators;
