@@ -151,6 +151,19 @@ where
     }
 }
 
+impl<'a, T> core::fmt::Debug for Tracked<'a, T>
+where
+    T: Trackable<'a> + core::fmt::Debug,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Tracked")
+            .field("value", &self.value)
+            .field("modified", &self.changes.is_changed::<T>())
+            .finish()
+    }
+}
+
+
 impl<'a, T> Deref for Tracked<'a, T>
 where
     T: 'a + Deref + Trackable<'a>,
