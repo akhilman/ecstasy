@@ -1,13 +1,13 @@
-use super::{AccessMode, Changes, Trackable, ElementTypeId};
+use crate::query::{AccessMode, Changes, ElementTypeId, Trackable};
 
-use hecs::Or;
+use hecs;
 
-impl<'a, L, R> Trackable<'a> for Or<L, R>
+impl<'a, L, R> Trackable<'a> for hecs::Or<L, R>
 where
     L: Trackable<'a>,
     R: Trackable<'a>,
 {
-    type Tracked = Or<L::Tracked, R::Tracked>;
+    type Tracked = hecs::Or<L::Tracked, R::Tracked>;
 
     fn count_types() -> usize {
         L::count_types() + R::count_types()
@@ -18,18 +18,18 @@ where
         R::for_each_type(|t, m| f(t, m));
     }
 
-    fn to_tracked(self, changes: &'a Changes) -> Self::Tracked {
+    fn into_tracked(self, changes: &'a Changes) -> Self::Tracked {
         match self {
-            Or::Left(l) => Or::Left(l.to_tracked(changes)),
-            Or::Right(r) => Or::Right(r.to_tracked(changes)),
-            Or::Both(l, r) => Or::Both(l.to_tracked(changes), r.to_tracked(changes)),
+            hecs::Or::Left(l) => hecs::Or::Left(l.into_tracked(changes)),
+            hecs::Or::Right(r) => hecs::Or::Right(r.into_tracked(changes)),
+            hecs::Or::Both(l, r) => hecs::Or::Both(l.into_tracked(changes), r.into_tracked(changes)),
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::query::{AccessMode, Changes, Trackable, ElementTypeId};
+    use crate::query::{AccessMode, Changes, ElementTypeId, Trackable};
     use hecs::Or;
 
     #[test]
@@ -53,7 +53,7 @@ mod tests {
         let or_value: QueryType = Or::new(Some(&mut value), None).unwrap();
 
         let changes = Changes::new_for(&or_value);
-        let mut tracked = or_value.to_tracked(&changes);
+        let mut tracked = or_value.into_tracked(&changes);
 
         tracked
             .as_ref()
@@ -82,7 +82,7 @@ mod tests {
         let or_value: QueryType = Or::new(None, Some(&mut value)).unwrap();
 
         let changes = Changes::new_for(&or_value);
-        let mut tracked = or_value.to_tracked(&changes);
+        let mut tracked = or_value.into_tracked(&changes);
 
         tracked
             .as_ref()
@@ -111,7 +111,7 @@ mod tests {
         let or_value: QueryType = Or::new(Some(&mut left), Some(&mut right)).unwrap();
 
         let changes = Changes::new_for(&or_value);
-        let mut tracked = or_value.to_tracked(&changes);
+        let mut tracked = or_value.into_tracked(&changes);
 
         tracked
             .as_ref()

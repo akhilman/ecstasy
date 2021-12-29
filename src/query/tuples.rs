@@ -34,12 +34,12 @@ macro_rules! tracked_tuple_impl {
             }
 
             #[allow(unused_variables)]
-            fn to_tracked(self, changes: &'a Changes) -> Self::Tracked {
+            fn into_tracked(self, changes: &'a Changes) -> Self::Tracked {
                 #[allow(non_snake_case)]
                 let ($($name,)*) = self;
                 (
                     $(
-                        $name.to_tracked(changes),
+                        $name.into_tracked(changes),
                     )*
                 )
             }
@@ -81,7 +81,7 @@ mod tests {
         let reference = (value.0.as_mut(), &mut value.1);
 
         let changes = Changes::new_for(&reference);
-        let tracked = reference.to_tracked(&changes);
+        let tracked = reference.into_tracked(&changes);
 
         let (mut a, mut b) = tracked;
         a.as_ref()

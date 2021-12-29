@@ -12,18 +12,15 @@ pub enum AccessMode {
     ReadWrite,
 }
 
-pub trait Trackable<'a>
-where
-    Self: 'a,
-{
-    type Tracked: 'a;
+pub trait Trackable<'a> {
+    type Tracked;
 
     fn count_types() -> usize;
 
     /// Invoke `f` for every type that may be borrowed and whether the borrow is unique
     fn for_each_type(f: impl FnMut(ElementTypeId, AccessMode));
 
-    fn to_tracked(self, changes: &'a Changes) -> Self::Tracked;
+    fn into_tracked(self, changes: &'a Changes) -> Self::Tracked;
 }
 
 impl<'a, T> Trackable<'a> for &'a T
@@ -40,7 +37,7 @@ where
         f(ElementTypeId::of::<T>(), AccessMode::ReadOnly);
     }
 
-    fn to_tracked(self, changes: &'a Changes) -> Self::Tracked {
+    fn into_tracked(self, changes: &'a Changes) -> Self::Tracked {
         Tracked::new(self, changes)
     }
 }
@@ -59,7 +56,7 @@ where
         f(ElementTypeId::of::<T>(), AccessMode::ReadWrite);
     }
 
-    fn to_tracked(self, changes: &'a Changes) -> Self::Tracked {
+    fn into_tracked(self, changes: &'a Changes) -> Self::Tracked {
         Tracked::new(self, changes)
     }
 }
@@ -78,8 +75,8 @@ where
         <T as Trackable>::for_each_type(f)
     }
 
-    fn to_tracked(self, changes: &'a Changes) -> Self::Tracked {
-        self.map(|value| value.to_tracked(changes))
+    fn into_tracked(self, changes: &'a Changes) -> Self::Tracked {
+        self.map(|value| value.into_tracked(changes))
     }
 }
 
@@ -88,7 +85,7 @@ pub struct Changes {
 }
 
 impl Changes {
-    pub(crate) fn new_for<'a, T: Trackable<'a>>(_: &T) -> Self {
+    pub(crate) fn new<'a, T: Trackable<'a>>() -> Self {
         use std::collections::btree_map::Entry;
         let mut changes = BTreeMap::default();
         <T as Trackable>::for_each_type(|id, _| match changes.entry(id) {
@@ -98,6 +95,9 @@ impl Changes {
             Entry::Occupied(_) => (),
         });
         Self { changes }
+    }
+    pub(crate) fn new_for<'a, T: Trackable<'a>>(_: &T) -> Self {
+        Self::new::<'a, T>()
     }
 
     pub fn for_each_changed(&self, mut f: impl FnMut(ElementTypeId)) {
@@ -133,7 +133,7 @@ impl Changes {
 
 pub struct Tracked<'a, T>
 where
-    T: 'a + Trackable<'a>,
+    T: Trackable<'a>,
 {
     value: T,
     changes: &'a Changes,
@@ -141,7 +141,7 @@ where
 
 impl<'a, T> Tracked<'a, T>
 where
-    T: 'a + Trackable<'a>,
+    T: Trackable<'a>,
 {
     fn new(value: T, changes: &'a Changes) -> Self {
         Self { value, changes }
@@ -163,10 +163,9 @@ where
     }
 }
 
-
 impl<'a, T> Deref for Tracked<'a, T>
 where
-    T: 'a + Deref + Trackable<'a>,
+    T: Deref + Trackable<'a>,
 {
     type Target = <T as Deref>::Target;
     fn deref(&self) -> &Self::Target {
@@ -176,7 +175,7 @@ where
 
 impl<'a, T> DerefMut for Tracked<'a, T>
 where
-    T: 'a + DerefMut + Trackable<'a>,
+    T: DerefMut + Trackable<'a>,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.set_changed();
@@ -235,7 +234,7 @@ mod tests {
         let mut value = 0u32;
         let reference = &mut value;
         let changes = Changes::new_for(&reference);
-        let mut tracked = reference.to_tracked(&changes);
+        let mut tracked = reference.into_tracked(&changes);
         let mut changed_types = vec![];
 
         changes.for_each_changed(|t| changed_types.push(t));
@@ -260,7 +259,7 @@ mod tests {
         let mut value = 0u32;
         let reference = Some(&mut value);
         let changes = Changes::new_for(&reference);
-        let mut tracked = reference.to_tracked(&changes);
+        let mut tracked = reference.into_tracked(&changes);
         let mut changed_types = vec![];
 
         changes.for_each_changed(|t| changed_types.push(t));
