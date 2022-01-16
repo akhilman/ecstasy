@@ -94,6 +94,20 @@ where
             .next()
             .map(|(entity, components)| (entity, components.into_tracked(self.changes)))
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.inner.size_hint()
+    }
+}
+
+impl<'q, Q> ExactSizeIterator for TrackedQueryIter<'q, Q>
+where
+    Q: Query,
+    QueryItem<'q, Q>: Trackable<'q>,
+{
+    fn len(&self) -> usize {
+        self.inner.len()
+    }
 }
 
 #[cfg(test)]
