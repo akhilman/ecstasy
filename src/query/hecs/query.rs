@@ -27,7 +27,7 @@ where
     Q: Query,
     QueryItem<'w, Q>: Trackable<'w>,
 {
-    query_borrow: QueryBorrow<'w, Q>,
+    inner: QueryBorrow<'w, Q>,
     changes: &'w Changes,
 }
 
@@ -36,16 +36,16 @@ where
     Q: Query,
     QueryItem<'w, Q>: Trackable<'w>,
 {
-    fn new(query_borrow: QueryBorrow<'w, Q>, changes: &'w Changes) -> Self {
+    fn new(inner: QueryBorrow<'w, Q>, changes: &'w Changes) -> Self {
         Self {
-            query_borrow,
+            inner,
             changes,
         }
     }
 
     // The lifetime narrowing here is required for soundness.
     pub fn iter(&mut self) -> TrackedQueryIter<'_, Q> {
-        let iter = self.query_borrow.iter();
+        let iter = self.inner.iter();
         TrackedQueryIter::new(iter, self.changes)
     }
 }
@@ -67,7 +67,7 @@ pub struct TrackedQueryIter<'q, Q>
 where
     Q: Query,
 {
-    query_iter: QueryIter<'q, Q>,
+    inner: QueryIter<'q, Q>,
     changes: &'q Changes,
 }
 
@@ -75,9 +75,9 @@ impl<'q, Q> TrackedQueryIter<'q, Q>
 where
     Q: Query,
 {
-    fn new(query_iter: QueryIter<'q, Q>, changes: &'q Changes) -> Self {
+    fn new(inner: QueryIter<'q, Q>, changes: &'q Changes) -> Self {
         Self {
-            query_iter,
+            inner,
             changes,
         }
     }
@@ -90,7 +90,7 @@ where
 {
     type Item = (Entity, <QueryItem<'q, Q> as Trackable<'q>>::Tracked);
     fn next(&mut self) -> Option<Self::Item> {
-        self.query_iter
+        self.inner
             .next()
             .map(|(entity, components)| (entity, components.into_tracked(self.changes)))
     }
