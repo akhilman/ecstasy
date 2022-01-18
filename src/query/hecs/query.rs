@@ -2,30 +2,30 @@ use crate::query::{AccessMode, Changes, ElementTypeId, Trackable};
 use hecs::{Entity, Query, QueryBorrow, QueryItem, QueryIter};
 use std::iter::{IntoIterator, Iterator};
 
-impl<'w, Q> Trackable<'w> for QueryBorrow<'w, Q>
-where
-    Q: Query,
-    QueryItem<'w, Q>: Trackable<'w>,
-{
-    type Tracked = TrackedQueryBorrow<'w, Q>;
+use super::TrackableQuery;
 
-    fn count_types() -> usize {
-        <QueryItem<'w, Q> as Trackable>::count_types()
-    }
+// impl<'w, Q> Trackable<'w> for QueryBorrow<'w, Q>
+// where
+//     Q: TrackableQuery,
+// {
+//     type Tracked = TrackedQueryBorrow<'w, Q>;
 
-    fn for_each_type(f: impl FnMut(ElementTypeId, AccessMode)) {
-        <QueryItem<'w, Q> as Trackable>::for_each_type(f)
-    }
+//     fn count_types() -> usize {
+//         <QueryItem<'w, Q> as Trackable>::count_types()
+//     }
 
-    fn into_tracked(self, changes: &'w Changes) -> Self::Tracked {
-        TrackedQueryBorrow::new(self, changes)
-    }
-}
+//     fn for_each_type(f: impl FnMut(ElementTypeId, AccessMode)) {
+//         <QueryItem<'w, Q> as Trackable>::for_each_type(f)
+//     }
+
+//     fn into_tracked(self, changes: &'w Changes) -> Self::Tracked {
+//         TrackedQueryBorrow::new(self, changes)
+//     }
+// }
 
 pub struct TrackedQueryBorrow<'w, Q>
 where
-    Q: Query,
-    QueryItem<'w, Q>: Trackable<'w>,
+    Q: TrackableQuery<'w>,
 {
     inner: QueryBorrow<'w, Q>,
     changes: &'w Changes,
@@ -33,14 +33,10 @@ where
 
 impl<'w, Q> TrackedQueryBorrow<'w, Q>
 where
-    Q: Query,
-    QueryItem<'w, Q>: Trackable<'w>,
+    Q: TrackableQuery<'w>,
 {
     fn new(inner: QueryBorrow<'w, Q>, changes: &'w Changes) -> Self {
-        Self {
-            inner,
-            changes,
-        }
+        Self { inner, changes }
     }
 
     // The lifetime narrowing here is required for soundness.
@@ -52,8 +48,7 @@ where
 
 impl<'q, Q> IntoIterator for &'q mut TrackedQueryBorrow<'q, Q>
 where
-    Q: Query,
-    QueryItem<'q, Q>: Trackable<'q>,
+    Q: TrackableQuery<'q>,
 {
     type IntoIter = TrackedQueryIter<'q, Q>;
     type Item = (Entity, <QueryItem<'q, Q> as Trackable<'q>>::Tracked);
@@ -76,13 +71,11 @@ where
     Q: Query,
 {
     fn new(inner: QueryIter<'q, Q>, changes: &'q Changes) -> Self {
-        Self {
-            inner,
-            changes,
-        }
+        Self { inner, changes }
     }
 }
 
+/*
 impl<'q, Q> Iterator for TrackedQueryIter<'q, Q>
 where
     Q: Query,
@@ -130,7 +123,10 @@ mod tests {
         }
 
         let mut world = World::default();
-        let changes = Changes::new::<(&u32, &i32, &String)>();
+        let mut changes = Changes::new();
+        changes.reserve(ElementTypeId::of::<u32>());
+        changes.reserve(ElementTypeId::of::<i32>());
+        changes.reserve(ElementTypeId::of::<String>());
 
         world.spawn((0u32, 0i32, "hello".to_string()));
         world.spawn((1u32, 1i32, "hello".to_string()));
@@ -149,3 +145,4 @@ mod tests {
         assert_eq!(changed_types.as_slice(), &[ElementTypeId::of::<u32>()]);
     }
 }
+*/

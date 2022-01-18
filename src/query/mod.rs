@@ -5,6 +5,6 @@ mod type_id;
 
 pub use {
     self::hecs::{TrackedQueryBorrow, TrackedQueryIter},
-    tracked::{AccessMode, Changes, Trackable, Tracked},
+    tracked::{AccessMode, Changes, Trackable, TrackedMut, TrackedRef},
     type_id::ElementTypeId,
 };

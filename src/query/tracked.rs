@@ -27,7 +27,7 @@ impl<'a, T> Trackable<'a> for &'a T
 where
     T: 'static,
 {
-    type Tracked = Tracked<'a, Self>;
+    type Tracked = TrackedRef<'a, T>;
 
     fn count_types() -> usize {
         1
@@ -38,7 +38,7 @@ where
     }
 
     fn into_tracked(self, changes: &'a Changes) -> Self::Tracked {
-        Tracked::new(self, changes)
+        TrackedRef::new(self, changes)
     }
 }
 
@@ -46,7 +46,7 @@ impl<'a, T> Trackable<'a> for &'a mut T
 where
     T: 'static,
 {
-    type Tracked = Tracked<'a, Self>;
+    type Tracked = TrackedMut<'a, T>;
 
     fn count_types() -> usize {
         1
@@ -57,7 +57,7 @@ where
     }
 
     fn into_tracked(self, changes: &'a Changes) -> Self::Tracked {
-        Tracked::new(self, changes)
+        TrackedMut::new(self, changes)
     }
 }
 
@@ -85,19 +85,25 @@ pub struct Changes {
 }
 
 impl Changes {
-    pub(crate) fn new<'a, T: Trackable<'a>>() -> Self {
+    pub(crate) fn new() -> Self {
+        Self {
+            changes: BTreeMap::new(),
+        }
+    }
+    pub(crate) fn new_for<'a, T: Trackable<'a>>(_: &T) -> Self {
+        let mut changes = Self::new();
+        T::for_each_type(|t, _| changes.reserve(t));
+        changes
+    }
+
+    pub(crate) fn reserve(&mut self, type_id: ElementTypeId) {
         use std::collections::btree_map::Entry;
-        let mut changes = BTreeMap::default();
-        <T as Trackable>::for_each_type(|id, _| match changes.entry(id) {
+        match self.changes.entry(type_id) {
             Entry::Vacant(entry) => {
                 entry.insert(AtomicBool::new(false));
             }
             Entry::Occupied(_) => (),
-        });
-        Self { changes }
-    }
-    pub(crate) fn new_for<'a, T: Trackable<'a>>(_: &T) -> Self {
-        Self::new::<'a, T>()
+        }
     }
 
     pub fn for_each_changed(&self, mut f: impl FnMut(ElementTypeId)) {
@@ -108,75 +114,111 @@ impl Changes {
         })
     }
 
-    pub fn set_changed<'a, T: Trackable<'a>>(&self) {
-        <T as Trackable>::for_each_type(|id, _| {
-            if let Some(value) = self.changes.get(&id) {
-                value.store(true, Ordering::Relaxed);
-            } else {
-                // FIXME What we should do if item not found?
-            }
-        });
+    pub(crate) fn get_atomic(&self, type_id: ElementTypeId) -> Option<&AtomicBool> {
+        self.changes.get(&type_id)
     }
 
-    pub fn is_changed<'a, T: Trackable<'a>>(&self) -> bool {
-        let mut ret = false;
-        <T as Trackable>::for_each_type(|id, _| {
-            ret = ret
-                || match self.changes.get(&id) {
-                    Some(value) => value.load(Ordering::Relaxed),
-                    None => false, // FIXME What we should do if item not found?
-                };
-        });
-        ret
+    pub fn set_changed(&self, type_id: ElementTypeId) {
+        if let Some(value) = self.changes.get(&type_id) {
+            value.store(true, Ordering::Relaxed);
+        } else {
+            panic!("Changed flag for {} is not reserved", type_id);
+        }
+    }
+
+    pub fn is_changed(&self, type_id: ElementTypeId) -> bool {
+        match self.changes.get(&type_id) {
+            Some(value) => value.load(Ordering::Relaxed),
+            None => false,
+        }
     }
 }
 
-pub struct Tracked<'a, T>
+pub struct TrackedRef<'a, T>
 where
-    T: Trackable<'a>,
+    T: 'static,
 {
-    value: T,
+    value: &'a T,
     changes: &'a Changes,
 }
 
-impl<'a, T> Tracked<'a, T>
+impl<'a, T> TrackedRef<'a, T>
 where
-    T: Trackable<'a>,
+    T: 'static,
 {
-    fn new(value: T, changes: &'a Changes) -> Self {
+    fn new(value: &'a T, changes: &'a Changes) -> Self {
         Self { value, changes }
     }
     pub fn set_changed(&self) {
-        self.changes.set_changed::<T>();
+        self.changes.set_changed(ElementTypeId::of::<T>())
     }
 }
 
-impl<'a, T> core::fmt::Debug for Tracked<'a, T>
+pub struct TrackedMut<'a, T>
 where
-    T: Trackable<'a> + core::fmt::Debug,
+    T: 'static,
+{
+    value: &'a mut T,
+    changes: &'a Changes,
+}
+
+impl<'a, T> TrackedMut<'a, T>
+where
+    T: 'static,
+{
+    fn new(value: &'a mut T, changes: &'a Changes) -> Self {
+        Self { value, changes }
+    }
+    pub fn set_changed(&self) {
+        self.changes.set_changed(ElementTypeId::of::<T>())
+    }
+}
+
+impl<'a, T> core::fmt::Debug for TrackedRef<'a, T>
+where
+    T: core::fmt::Debug,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Tracked")
+        f.debug_struct(format!("TrackedRef<{}>", std::any::type_name::<T>()).as_str())
             .field("value", &self.value)
-            .field("modified", &self.changes.is_changed::<T>())
+            .field(
+                "changed",
+                &self.changes.is_changed(ElementTypeId::of::<T>()),
+            )
             .finish()
     }
 }
 
-impl<'a, T> Deref for Tracked<'a, T>
+impl<'a, T> core::fmt::Debug for TrackedMut<'a, T>
 where
-    T: Deref + Trackable<'a>,
+    T: core::fmt::Debug,
 {
-    type Target = <T as Deref>::Target;
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct(format!("TrackedMut<{}>", std::any::type_name::<T>()).as_str())
+            .field("value", &self.value)
+            .field(
+                "changed",
+                &self.changes.is_changed(ElementTypeId::of::<T>()),
+            )
+            .finish()
+    }
+}
+
+impl<'a, T> Deref for TrackedRef<'a, T> {
+    type Target = T;
     fn deref(&self) -> &Self::Target {
         &*(self.value)
     }
 }
 
-impl<'a, T> DerefMut for Tracked<'a, T>
-where
-    T: DerefMut + Trackable<'a>,
-{
+impl<'a, T> Deref for TrackedMut<'a, T> {
+    type Target = T;
+    fn deref(&self) -> &Self::Target {
+        &*(self.value)
+    }
+}
+
+impl<'a, T> DerefMut for TrackedMut<'a, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.set_changed();
         &mut *(self.value)
