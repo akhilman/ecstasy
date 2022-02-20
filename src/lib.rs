@@ -13,11 +13,6 @@ macro_rules! smaller_tuples_too {
     };
 }
 
-pub mod query;
-
-
-// pub mod query;
-
 #[cfg(test)]
 mod tests {
     #[test]

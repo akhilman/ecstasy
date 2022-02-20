@@ -1,17 +1,23 @@
-# ECStASy
-The Entity Component System wiTh Asynchronous SYstems
- built on top of the [Handy Entity Component System](https://github.com/Ralith/hecs).
+# ECStAsy
+The Entity Component System wiTh ASYnchronous scheduler.
+
+The asynchronous scheduler for [Edict](https://github.com/zakarumych/edict).
 
 
 ## TODO
-- [X] Change tracking for `&T`, `&mut T`, `Option<T>`, `hecs::Or`, and tuples;
-- [X] Tracked adapter for `hecs::Query` and `hecs::QueryIter`;
-- [ ] Tracked adapter for rest hecs'es query types;
-- [ ] Tracked adapter for rest hecs'es query iterators;
-- [ ] Subworld and world split;
-- [ ] Wrapper type for `hecs::World` with change tracking;
-- [ ] Resources and resource query;
-- [ ] `AsyncSystem` trait and async scheduler;
-- [ ] `System` trait and sequential scheduler;
-- [ ] Threaded scheduler;
-- [ ] Documentation and comments;
+- [ ] Dynamic sequential scheduler;
+	- [ ] System trait for function;
+	- [ ] World View;
+- [ ] Dynamic parallel scheduler;
+	- [ ] World view with protection from aliasing;
+- [ ] Shared resources;
+- [ ] Support non `Sand` and non `Sync` components;
+- [ ] Support non `Sand` and non `Sync` resources;
+- [ ] Static sequential scheduler;
+- [ ] Static parallel scheduler;
+- [ ] Example chat application;
+	- [ ] Websocket chat server;
+	- [ ] Console chat client;
+	- [ ] Gtk chat client;
+	- [ ] Wasm chat client;
+- [ ] Documentation;
